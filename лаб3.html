@@ -494,11 +494,34 @@
             from, to { border-color: transparent }
             50% { border-color: var(--accent) }
         }
+
+        .processing-type {
+            margin-bottom: 15px;
+        }
+
+        .processing-type label {
+            display: inline-block;
+            margin-right: 20px;
+            cursor: pointer;
+        }
+
+        .processing-type input[type="radio"] {
+            margin-right: 8px;
+        }
+
+        .auto-threshold-info {
+            background: rgba(139, 69, 19, 0.1);
+            padding: 10px;
+            border-radius: 2px;
+            margin-top: 10px;
+            font-size: 0.9rem;
+            font-family: 'Source Code Pro', monospace;
+        }
     </style>
 </head>
 <body>
     <div class="decorative-element decor-1">⧖</div>
-    <div class="div class="decorative-element decor-2">⟁</div>
+    <div class="decorative-element decor-2">⟁</div>
     
     <div class="container">
         <header>
@@ -525,8 +548,9 @@
                 <h2>Настройки обработки</h2>
                 
                 <div class="method-description">
-                    <p><strong>Глобальная пороговая обработка</strong> — единый порог для всего изображения</p>
-                    <p><strong>Адаптивная пороговая обработка</strong> — локальный порог для каждой области</p>
+                    <p><strong>Глобальная пороговая обработка</strong></p>
+                    <p><strong>Адаптивная пороговая обработка</strong></p>
+                    <p><strong>Итеративный метод</strong></p>
                 </div>
 
                 <div class="control-group">
@@ -539,10 +563,34 @@
                 </div>
 
                 <div class="control-group" id="globalControls">
-                    <label for="thresholdValue">Пороговое значение:</label>
-                    <div class="slider-container">
-                        <input type="range" id="thresholdValue" min="0" max="255" value="128">
-                        <div class="slider-value" id="thresholdValueDisplay">128</div>
+                    <div class="processing-type">
+                        <label>
+                            <input type="radio" name="globalType" value="manual" checked>
+                            Ручной порог
+                        </label>
+                        <label>
+                            <input type="radio" name="globalType" value="iterative">
+                            Итеративный метод
+                        </label>
+                    </div>
+
+                    <div id="manualControls">
+                        <label for="thresholdValue">Пороговое значение:</label>
+                        <div class="slider-container">
+                            <input type="range" id="thresholdValue" min="0" max="255" value="128">
+                            <div class="slider-value" id="thresholdValueDisplay">128</div>
+                        </div>
+                    </div>
+
+                    <div id="iterativeControls" style="display: none;">
+                        <label for="epsilonValue">Точность (ε):</label>
+                        <div class="slider-container">
+                            <input type="range" id="epsilonValue" min="0.1" max="5" step="0.1" value="1">
+                            <div class="slider-value" id="epsilonValueDisplay">1.0</div>
+                        </div>
+                        <div class="auto-threshold-info" id="autoThresholdInfo">
+                            Порог будет вычислен автоматически
+                        </div>
                     </div>
                 </div>
 
@@ -595,8 +643,34 @@
             const thresholdMethod = document.getElementById('thresholdMethod');
             const globalControls = document.getElementById('globalControls');
             const adaptiveControls = document.getElementById('adaptiveControls');
+            const manualControls = document.getElementById('manualControls');
+            const iterativeControls = document.getElementById('iterativeControls');
+            const histogramContainer = document.getElementById('histogramContainer');
+            const histogramCanvas = document.getElementById('histogramCanvas');
+            const autoThresholdInfo = document.getElementById('autoThresholdInfo');
             
             let originalImage = null;
+            let histogramData = null;
+
+            initializeControls();
+
+            function initializeControls() {
+                document.querySelectorAll('input[name="globalType"]').forEach(radio => {
+                    radio.addEventListener('change', function() {
+                        if (this.value === 'manual') {
+                            manualControls.style.display = 'block';
+                            iterativeControls.style.display = 'none';
+                        } else {
+                            manualControls.style.display = 'none';
+                            iterativeControls.style.display = 'block';
+                        }
+                    });
+                });
+
+                document.getElementById('epsilonValue').addEventListener('input', function() {
+                    document.getElementById('epsilonValueDisplay').textContent = parseFloat(this.value).toFixed(1);
+                });
+            }
 
             uploadArea.addEventListener('click', () => fileInput.click());
             uploadArea.addEventListener('dragover', (e) => {
@@ -647,7 +721,7 @@
             document.getElementById('constantValue').addEventListener('input', function() {
                 document.getElementById('constantValueDisplay').textContent = this.value;
             });
-            
+
             processBtn.addEventListener('click', processImage);
             resetBtn.addEventListener('click', resetAll);
 
@@ -665,10 +739,35 @@
                     originalImage.src = e.target.result;
                     originalImage.onload = function() {
                         resultsSection.style.display = 'block';
+                        histogramContainer.style.display = 'block';
+                        calculateHistogram();
                     };
                 };
                 reader.readAsDataURL(file);
             }
+
+            function calculateHistogram() {
+                if (!originalImage) return;
+
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = originalImage.width;
+                canvas.height = originalImage.height;
+                ctx.drawImage(originalImage, 0, 0);
+
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    const brightness = Math.round(0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2]);
+
+                }
+            }
+                
+                ctx.clearRect(0, 0, width, height);
+                const scale = height / maxCount;
+                
 
             function processImage() {
                 if (!originalImage) {
@@ -678,7 +777,7 @@
 
                 resultsGrid.innerHTML = '';
                 const method = thresholdMethod.value;
-                
+
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
                 canvas.width = originalImage.width;
@@ -688,9 +787,16 @@
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 
                 if (method === 'global' || method === 'both') {
-                    const threshold = parseInt(document.getElementById('thresholdValue').value);
-                    const globalResult = applyGlobalThreshold(imageData, threshold);
-                    displayResult('Глобальная пороговая обработка', globalResult);
+                    const globalType = document.querySelector('input[name="globalType"]:checked').value;
+                    if (globalType === 'manual') {
+                        const threshold = parseInt(document.getElementById('thresholdValue').value);
+                        const globalResult = applyGlobalThreshold(imageData, threshold);
+                        displayResult('Глобальная пороговая обработка (ручной)', globalResult);
+                    } else {
+                        const epsilon = parseFloat(document.getElementById('epsilonValue').value);
+                        const iterativeResult = applyIterativeThreshold(imageData, epsilon);
+                        displayResult('Глобальная пороговая обработка (итеративный)', iterativeResult);
+                    }
                 }
                 
                 if (method === 'adaptive' || method === 'both') {
@@ -702,12 +808,55 @@
 
                 if (method === 'both') {
                     comparisonSection.style.display = 'block';
-                    document.getElementById('comparisonText').textContent = 
-                        'Глобальная пороговая обработка демонстрирует эффективность на изображениях с равномерным освещением. ' +
-                        'Адаптивная обработка превосходит её при работе с изображениями, имеющими неравномерную освещенность.';
+                    document.getElementById('comparisonText').textContent = ' '
                 } else {
                     comparisonSection.style.display = 'none';
                 }
+            }
+
+            function calculateIterativeThreshold(imageData, epsilon = 1) {
+                const data = imageData.data;
+                let t = 128; 
+                let t_prev;
+                let iterations = 0;
+                const maxIterations = 100;
+
+                do {
+                    t_prev = t;
+                    let sum1 = 0, count1 = 0;
+                    let sum2 = 0, count2 = 0;
+
+                    for (let i = 0; i < data.length; i += 4) {
+                        const brightness = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+                        if (brightness > t) {
+                            sum1 += brightness;
+                            count1++;
+                        } else {
+                            sum2 += brightness;
+                            count2++;
+                        }
+                    }
+
+                    const mean1 = count1 > 0 ? sum1 / count1 : 0;
+                    const mean2 = count2 > 0 ? sum2 / count2 : 0;
+
+                    t = (mean1 + mean2) / 2;
+                    iterations++;
+
+                    if (iterations > maxIterations) {
+                        break;
+                    }
+
+                } while (Math.abs(t - t_prev) > epsilon);
+
+                autoThresholdInfo.textContent = `Вычисленный порог: ${Math.round(t)} (итераций: ${iterations})`;
+                
+                return Math.round(t);
+            }
+
+            function applyIterativeThreshold(imageData, epsilon) {
+                const threshold = calculateIterativeThreshold(imageData, epsilon);
+                return applyGlobalThreshold(imageData, threshold);
             }
 
             function applyGlobalThreshold(imageData, threshold) {
@@ -721,9 +870,9 @@
                 for (let i = 0; i < data.length; i += 4) {
                     const brightness = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
                     const value = brightness > threshold ? 255 : 0;
-                    data[i] = value;     
-                    data[i+1] = value;   
-                    data[i+2] = value;   
+                    data[i] = value;     // R
+                    data[i+1] = value;   // G
+                    data[i+2] = value;   // B
                 }
                 
                 return newImageData;
@@ -768,9 +917,9 @@
                         const value = grayData[pixelIndex] > threshold ? 255 : 0;
                         
                         const dataIndex = pixelIndex * 4;
-                        data[dataIndex] = value;     
-                        data[dataIndex+1] = value;   
-                        data[dataIndex+2] = value;   
+                        data[dataIndex] = value;     // R
+                        data[dataIndex+1] = value;   // G
+                        data[dataIndex+2] = value;   // B
                     }
                 }
                 
@@ -801,12 +950,25 @@
                 resultsSection.style.display = 'none';
                 comparisonSection.style.display = 'none';
                 originalImage = null;
+
                 document.getElementById('thresholdValue').value = 128;
                 document.getElementById('thresholdValueDisplay').textContent = '128';
                 document.getElementById('blockSize').value = 11;
                 document.getElementById('blockSizeDisplay').textContent = '11';
                 document.getElementById('constantValue').value = 2;
                 document.getElementById('constantValueDisplay').textContent = '2';
+                document.getElementById('epsilonValue').value = 1;
+                document.getElementById('epsilonValueDisplay').textContent = '1.0';
+                
+                document.querySelector('input[name="globalType"][value="manual"]').checked = true;
+                manualControls.style.display = 'block';
+                iterativeControls.style.display = 'none';
+                
+                thresholdMethod.value = 'global';
+                globalControls.style.display = 'block';
+                adaptiveControls.style.display = 'none';
+
+                autoThresholdInfo.textContent = 'Порог будет вычислен автоматически';
             }
         });
     </script>
